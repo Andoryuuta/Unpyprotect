@@ -1,5 +1,5 @@
 from xdis.load import load_module
-from xdis.bytecode import get_instructions_bytes
+from xdis.bytecode import get_instructions_bytes, instruction_size
 from xasm.assemble import Assembler, Instruction, create_code
 import xdis, xdis.main, xdis.marsh, xdis.code
 import uncompyle6
@@ -18,19 +18,20 @@ def nop_jump_junk(co, opc):
 
     # Abuse the text header to find the second jump.
     header_start_target = co.co_code.find(b'\r\n\r\n========')
-
-    # JUMP_FORWARD is a 3-byte instruction on python 2.7, right before the header.
-    second_jump_start = header_start_target-3
     has_pyprotect_header = header_start_target != -1
+
+    # Get the start of the JUMP_FORWARD, right before the header.
+    jump_forward_inst_size = instruction_size(opc.opmap['JUMP_FORWARD'], opc)
+    second_jump_start = header_start_target-jump_forward_inst_size
 
     # Go over the existing code and decide whether to copy each byte.
     fixed_code = bytearray()
     for i in range(len(co.co_code)):
         if (i < first_jump_target):
             # Replace the first anti-disassembly jump with NOPs
-            fixed_code.append(0x9)
+            fixed_code.append(opc.opmap['NOP'])
         elif has_pyprotect_header and (i >= second_jump_start):
-            # Don't copy anything after the second AD jump.
+            # Don't copy the second AD jump or anything after it.
             pass
         else:
             # Copy everything else.
